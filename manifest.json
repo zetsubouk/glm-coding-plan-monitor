@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "GLM Coding Plan 用量监控",
+  "version": "1.0.4",
+  "description": "监控智谱中国大陆版 GLM Coding Plan 用量：5小时/每周额度、月末MCP、24h模型与工具用量。密钥仅存本机，仅发给官方接口。",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["https://open.bigmodel.cn/*"],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "GLM Coding Plan 用量",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

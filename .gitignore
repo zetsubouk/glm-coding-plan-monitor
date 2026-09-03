@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.zip
+.hermes/
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo

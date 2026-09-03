@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<!-- 渲染验证用：注入同结构 DOM + chrome 桩 + 真实样例数据，验证 popup.js 渲染逻辑与 UI。
+     需通过 http 访问（模块相对导入）。 -->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="../popup/popup.css" />
+  <script id="stub">
+    // ---------- chrome 桩（注入真实数据） ----------
+    const NOW = Date.now();
+    const SAMPLE = {
+      level: "lite", levelName: "Lite", planExpiry: "2026-09-28", fetchedAt: NOW,
+      limits: [
+        { type: "CREDIT_LIMIT", unit: 3, number: 5, usage: 2000, currentValue: 505,
+          remaining: 1494, percentage: 25, nextResetTime: NOW + 90 * 60000, name: "5小时额度" },
+        { type: "CREDIT_LIMIT", unit: 6, number: 1, usage: 10000, currentValue: 962,
+          remaining: 9037, percentage: 9, nextResetTime: NOW + 6 * 86400000, name: "本周额度" }
+      ],
+      errors: [],
+      model: { total: { calls: 174, tokens: 16439326 },
+               models: [{ modelName: "GLM-5.3-Flash", totalTokens: 16439326 }] },
+      tool: { networkSearch: 0, webRead: 0, zread: 0 }
+    };
+    window.chrome = {
+      storage: {
+        local: {
+          get: async (keys) => ({ apiKey: "test", refreshMin: 10, lastData: SAMPLE, lastFetchAt: NOW }),
+          set: async () => {}
+        }
+      },
+      runtime: {
+        sendMessage: async (msg) => ({ ok: true, data: SAMPLE }),
+        onMessage: { addListener: () => {} }
+      }
+    };
+  </script>
+</head>
+<body>
+  <section id="setup" class="setup" hidden>
+    <div class="setup-head">
+      <div class="logo">GLM</div>
+      <div class="setup-title"><h1>配置 API Key</h1><p>填入 bigmodel.cn 后台的密钥以查看 Coding Plan 用量</p></div>
+    </div>
+    <div class="setup-body">
+      <label class="field"><span>API Key</span>
+        <input id="f-key" type="password" placeholder="粘贴智谱 API Key" /></label>
+      <label class="field"><span>自动刷新间隔</span>
+        <select id="f-refresh"><option value="10" selected>10 分钟</option></select></label>
+      <label class="field"><span>套餐到期日期（选填）</span>
+        <input id="f-expiry" type="date" /></label>
+      <button id="btn-save" class="primary">保存并查询</button>
+      <p id="setup-msg" class="msg" hidden></p>
+      <p class="privacy">密钥仅存本机，仅发送给智谱官方监控接口，无任何第三方。</p>
+    </div>
+  </section>
+
+  <section id="panel" class="panel" hidden>
+    <header class="head">
+      <div class="brand">
+        <div class="logo small">GLM</div>
+        <div>
+          <div class="brand-title">GLM Coding Plan</div>
+          <div class="sub">
+            <span id="plan-badge" class="plan-badge"></span>
+            <span id="plan-expiry" class="plan-expiry"></span>
+            <span id="last-updated" class="muted"></span>
+          </div>
+        </div>
+      </div>
+      <div class="head-actions">
+        <button id="btn-settings" class="icon-btn">⚙</button>
+        <button id="btn-refresh" class="icon-btn">⟳</button>
+      </div>
+    </header>
+    <div id="status-bar" class="status" hidden></div>
+    <div id="plan-err" class="plan-err" hidden></div>
+    <div id="limits" class="limits"></div>
+    <div id="mcp-wrap" class="mcp"></div>
+    <div id="usage-wrap"></div>
+  </section>
+
+  <script type="module" src="../popup/popup.js"></script>
+</body>
+</html>

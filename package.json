@@ -1,0 +1,12 @@
+{
+  "name": "glm-usage-monitor-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "GLM Coding Plan 用量监控 Chrome 扩展",
+  "scripts": {
+    "test:api": "node scripts/test-api.mjs",
+    "icons": "python scripts/gen_icons.py",
+    "build": "python scripts/package.py"
+  }
+}

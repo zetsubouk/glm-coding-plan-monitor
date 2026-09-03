@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GLM Coding Plan</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <!-- 没有密钥：设置引导 -->
+  <section id="setup" class="setup" hidden>
+    <div class="setup-head">
+      <div class="logo">GLM</div>
+      <div class="setup-title">
+        <h1>配置 API Key</h1>
+        <p>填入 bigmodel.cn 后台的密钥以查看 Coding Plan 用量</p>
+      </div>
+    </div>
+    <div class="setup-body">
+      <label class="field">
+        <span>API Key</span>
+        <input id="f-key" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴智谱 API Key" />
+      </label>
+      <label class="field">
+        <span>自动刷新间隔</span>
+        <select id="f-refresh">
+          <option value="1">1 分钟</option>
+          <option value="5">5 分钟</option>
+          <option value="10" selected>10 分钟</option>
+          <option value="15">15 分钟</option>
+          <option value="30">30 分钟</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>套餐到期日期（选填，显示在套餐等级后）</span>
+        <input id="f-expiry" type="date" />
+      </label>
+      <label class="field">
+        <span>平台</span>
+        <input type="text" value="中国大陆 · open.bigmodel.cn" disabled />
+      </label>
+      <button id="btn-save" class="primary">保存并查询</button>
+      <p id="setup-msg" class="msg" hidden></p>
+      <p class="privacy">密钥仅存本机，仅发送给智谱官方监控接口，无任何第三方。</p>
+    </div>
+  </section>
+
+  <!-- 主面板 -->
+  <section id="panel" class="panel" hidden>
+    <header class="head">
+      <div class="brand">
+        <div class="logo small">GLM</div>
+        <div>
+          <div class="brand-title">GLM Coding Plan</div>
+          <div class="sub">
+            <span id="plan-badge" class="plan-badge">—</span>
+            <span id="plan-expiry" class="plan-expiry"></span>
+            <span id="last-updated" class="muted"></span>
+          </div>
+        </div>
+      </div>
+      <div class="head-actions">
+        <button id="btn-settings" title="设置" class="icon-btn">⚙</button>
+        <button id="btn-refresh" title="刷新" class="icon-btn">⟳</button>
+      </div>
+    </header>
+
+    <div id="status-bar" class="status" hidden></div>
+    <div id="plan-err" class="plan-err" hidden></div>
+
+    <!-- 额度列表：横向进度条 -->
+    <div id="limits" class="limits"></div>
+    <!-- MCP（若有） -->
+    <div id="mcp-wrap" class="mcp"></div>
+
+    <!-- 用量明细 -->
+    <div id="usage-wrap"></div>
+  </section>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
