@@ -2,11 +2,11 @@
 
 # GLM Coding Plan 用量监控
 
-**智谱中国大陆版 · GLM Coding Plan 用量监控面板（Chrome 扩展）**
+**多供应商 AI Coding Plan 用量监控面板（Chrome 扩展）**
 
-实时查看你的 Coding Plan「5 小时 / 每周 / MCP 额度、24 小时模型与工具用量」，工具栏徽章随时掌握当前 5 小时使用占比。
+实时查看智谱 **GLM（中国大陆版）** 与 **OpenCode Go** 的 Coding Plan 用量：5 小时 / 每周 / 每月（MCP）额度，工具栏徽章随时掌握当前 5 小时使用占比。
 
-![Chrome](https://img.shields.io/badge/Chrome%20(Chromium)-96%2B-blue) ![Manifest](https://img.shields.io/badge/Manifest-V3-9cf) ![License](https://img.shields.io/badge/License-MIT-green) ![Version](https://img.shields.io/badge/Version-1.0.4-blue)
+![Chrome](https://img.shields.io/badge/Chrome%20(Chromium)-96%2B-blue) ![Manifest](https://img.shields.io/badge/Manifest-V3-9cf) ![License](https://img.shields.io/badge/License-MIT-green) ![Version](https://img.shields.io/badge/Version-1.1.0-blue)
 
 </div>
 
@@ -14,26 +14,33 @@
 
 ## 简介
 
-GLM Coding Plan 是智谱开放平台面向 AI 编程场景的订阅套餐。本扩展让你**无需登录网页后台**，点击浏览器工具栏即可查看套餐额度消耗情况：
+本扩展支持**多供应商**，可同时监控多个 AI Coding Plan 订阅的用量消耗情况：
 
+### 智谱 GLM（中国大陆版 `open.bigmodel.cn`）
 - 套餐等级（Lite / Pro / Max）与**到期日期**
 - **5 小时额度**与**每周额度**的已用百分比、已用/总额、剩余、重置时间
 - **月末 MCP** 调用次数（账号存在该额度时显示）
-- **24 小时模型用量**（调用次数、Tokens、分模型占比）
-- **24 小时工具用量**（联网搜索 / 网页读取 / ZRead）
-- 工具栏**徽章**实时显示当前 5 小时使用占比（绿 <80% / 黄 80–95% / 红 >95%）
 
-数据来自智谱**官方公开监控接口**，密钥仅存本机，仅发送给官方接口，无任何第三方服务或埋点。
+### OpenCode Go（`opencode.ai`）
+- **rolling 5 小时 / 每周 / 每月** 三条窗口用量与重置时间（官方 `/zen/go/v1/usage` 接口）
 
-> ⚠️ 本工具仅面向**中国大陆版 `open.bigmodel.cn`**。套餐额度仅统计官方支持工具内的编码用量；本扩展只做查询、不发起模型请求，因此**不会消耗你的套餐额度**。
+### 通用
+- 两个供应商可**复选启用**，同时启用时面板**分栏**显示；工具栏图标（单行大字号）**循环切换**显示两家 5 小时用量百分比
+- 图标循环间隔可在**设置中自定义**（5–60 秒）
+- 只启用一个供应商时，面板与徽章仅显示该家（徽章保持原尺寸、单个大百分比）
+- 各供应商**独立拉取、故障隔离**：一方失败不影响另一方
+- 图标徽章颜色按当前显示的那家百分比阈值：绿 <80% / 黄 80–95% / 红 >95%
+
+数据来自各供应商**官方公开接口**，密钥仅存本机，仅发给官方接口，无任何第三方服务或埋点。
 
 ## 功能特性
 
-- [x] 5 小时 / 每周额度横向进度条（已用%、已用/总额、剩余、重置倒计时）
+- [x] 多供应商（智谱 GLM / OpenCode Go）复选 + 各自 API Key
+- [x] 分栏显示双供应商用量；单个供应商时仅显示该家
+- [x] 循环切换徽章（双供应商时图标循环显示两家 5h 百分比，间隔可设置）
+- [x] 5 小时 / 每周 / 每月额度横向进度条（已用%、已用/总额、剩余、重置倒计时）
 - [x] 套餐等级 + 到期日期显示（到期 ≤7 天变黄、已过期变红）
-- [x] 24h 模型用量（次数、Tokens、分模型占比条）
-- [x] 24h 工具用量（联网搜索 / 网页读取 / ZRead）
-- [x] 工具栏徽章（占比实时显示，阈值变色）
+- [x] 工具栏徽章（占比实时显示，阈值变色；双供应商可配置循环切换间隔）
 - [x] 自动刷新（1–30 分钟可设）
 - [x] 深色扁平 UI、全中文
 

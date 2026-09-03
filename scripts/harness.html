@@ -1,35 +1,46 @@
 <!DOCTYPE html>
-<!-- 渲染验证用：注入同结构 DOM + chrome 桩 + 真实样例数据，验证 popup.js 渲染逻辑与 UI。
+<!-- 渲染验证用：注入同结构 DOM + chrome 桩 + 样例数据，验证 popup.js 双供应商渲染。
      需通过 http 访问（模块相对导入）。 -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <link rel="stylesheet" href="../popup/popup.css" />
   <script id="stub">
-    // ---------- chrome 桩（注入真实数据） ----------
     const NOW = Date.now();
     const SAMPLE = {
-      level: "lite", levelName: "Lite", planExpiry: "2026-09-28", fetchedAt: NOW,
-      limits: [
-        { type: "CREDIT_LIMIT", unit: 3, number: 5, usage: 2000, currentValue: 505,
-          remaining: 1494, percentage: 25, nextResetTime: NOW + 90 * 60000, name: "5小时额度" },
-        { type: "CREDIT_LIMIT", unit: 6, number: 1, usage: 10000, currentValue: 962,
-          remaining: 9037, percentage: 9, nextResetTime: NOW + 6 * 86400000, name: "本周额度" }
-      ],
-      errors: [],
-      model: { total: { calls: 174, tokens: 16439326 },
-               models: [{ modelName: "GLM-5.3-Flash", totalTokens: 16439326 }] },
-      tool: { networkSearch: 0, webRead: 0, zread: 0 }
+      fetchedAt: NOW,
+      providers: {
+        glm: {
+          level: "lite", levelName: "Lite", planExpiry: "2026-09-28",
+          limits: [
+            { type: "CREDIT_LIMIT", unit: 3, number: 5, usage: 2000, currentValue: 505,
+              remaining: 1494, percentage: 25, nextResetTime: NOW + 90 * 60000, name: "5小时额度" },
+            { type: "CREDIT_LIMIT", unit: 6, number: 1, usage: 10000, currentValue: 962,
+              remaining: 9037, percentage: 9, nextResetTime: NOW + 6 * 86400000, name: "本周额度" }
+          ],
+          model: { total: { calls: 174, tokens: 16439326 },
+                   models: [{ modelName: "GLM-5.3-Flash", totalTokens: 16439326 }] },
+          tool: { networkSearch: 0, webRead: 0, zread: 0 }
+        },
+        go: {
+          windows: [
+            { key: "rolling", name: "5 小时", percent: 1, limit: 12, resetsAt: new Date(NOW + 3600000).toISOString(), endTs: NOW + 3600000 },
+            { key: "weekly", name: "每周", percent: 27, limit: 30, resetsAt: new Date(NOW + 4 * 86400000).toISOString(), endTs: NOW + 4 * 86400000 },
+            { key: "monthly", name: "每月", percent: 36, limit: 60, resetsAt: new Date(NOW + 14 * 86400000).toISOString(), endTs: NOW + 14 * 86400000 }
+          ]
+        }
+      },
+      errors: []
     };
     window.chrome = {
       storage: {
         local: {
-          get: async (keys) => ({ apiKey: "test", refreshMin: 10, lastData: SAMPLE, lastFetchAt: NOW }),
+          get: async () => ({ apiKey: "", providers: { glm: { enabled: true, apiKey: "t", planExpiry: "2026-09-28" }, go: { enabled: true, apiKey: "t" } }, refreshMin: 10, lastData: SAMPLE, lastFetchAt: NOW }),
           set: async () => {}
         }
       },
       runtime: {
-        sendMessage: async (msg) => ({ ok: true, data: SAMPLE }),
+        sendMessage: async () => ({ ok: true, data: SAMPLE }),
         onMessage: { addListener: () => {} }
       }
     };
@@ -37,29 +48,37 @@
 </head>
 <body>
   <section id="setup" class="setup" hidden>
-    <div class="setup-head">
-      <div class="logo">GLM</div>
-      <div class="setup-title"><h1>配置 API Key</h1><p>填入 bigmodel.cn 后台的密钥以查看 Coding Plan 用量</p></div>
-    </div>
+    <div class="setup-head"><div class="logo">GLM</div>
+      <div class="setup-title"><h1>配置供应商</h1><p>勾选供应商并填入 API Key</p></div></div>
     <div class="setup-body">
-      <label class="field"><span>API Key</span>
-        <input id="f-key" type="password" placeholder="粘贴智谱 API Key" /></label>
+      <div class="prov-block">
+        <label class="prov-head"><input type="checkbox" id="f-glm-on" checked /><span class="prov-name"><b>GLM</b>（智谱中国大陆版）</span></label>
+        <div id="glm-fields" class="prov-fields">
+          <label class="field"><span>API Key</span><input id="f-glm-key" type="password" /></label>
+          <label class="field"><span>套餐到期日期（选填）</span><input id="f-glm-expiry" type="date" /></label>
+        </div>
+      </div>
+      <div class="prov-block">
+        <label class="prov-head"><input type="checkbox" id="f-go-on" checked /><span class="prov-name"><b>OpenCode Go</b>（opencode.ai）</span></label>
+        <div id="go-fields" class="prov-fields">
+          <label class="field"><span>API Key</span><input id="f-go-key" type="password" /></label>
+        </div>
+      </div>
       <label class="field"><span>自动刷新间隔</span>
         <select id="f-refresh"><option value="10" selected>10 分钟</option></select></label>
-      <label class="field"><span>套餐到期日期（选填）</span>
-        <input id="f-expiry" type="date" /></label>
+      <label class="field"><span>图标百分比循环切换间隔</span>
+        <select id="f-cycle"><option value="10" selected>10 秒</option></select></label>
       <button id="btn-save" class="primary">保存并查询</button>
       <p id="setup-msg" class="msg" hidden></p>
-      <p class="privacy">密钥仅存本机，仅发送给智谱官方监控接口，无任何第三方。</p>
     </div>
   </section>
 
-  <section id="panel" class="panel" hidden>
+  <section id="panel" class="panel">
     <header class="head">
       <div class="brand">
         <div class="logo small">GLM</div>
         <div>
-          <div class="brand-title">GLM Coding Plan</div>
+          <div class="brand-title" id="brand-title">GLM Coding Plan</div>
           <div class="sub">
             <span id="plan-badge" class="plan-badge"></span>
             <span id="plan-expiry" class="plan-expiry"></span>
@@ -74,9 +93,17 @@
     </header>
     <div id="status-bar" class="status" hidden></div>
     <div id="plan-err" class="plan-err" hidden></div>
-    <div id="limits" class="limits"></div>
-    <div id="mcp-wrap" class="mcp"></div>
-    <div id="usage-wrap"></div>
+    <div id="panes" class="panes">
+      <section id="pane-glm" class="pane">
+        <div class="pane-title">智谱 GLM</div>
+        <div id="limits" class="limits"></div>
+        <div id="mcp-wrap" class="mcp"></div>
+      </section>
+      <section id="pane-go" class="pane">
+        <div class="pane-title">OpenCode Go</div>
+        <div id="go-limits" class="limits"></div>
+      </section>
+    </div>
   </section>
 
   <script type="module" src="../popup/popup.js"></script>

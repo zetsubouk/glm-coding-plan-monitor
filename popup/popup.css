@@ -132,29 +132,26 @@ button.primary:hover { filter: brightness(1.08); }
 .mcp-row .l { color: var(--muted); font-weight: 600; }
 .mcp-row .v b { font-size: 13px; }
 
-/* ============ 用量明细 ============ */
-#usage-wrap { padding: 6px 16px 14px; }
-.usage-h {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; font-weight: 700; color: var(--muted); margin: 8px 0 8px;
-}
-.usage-h::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.kpi { padding: 10px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
-.kpi .n { font-size: 20px; font-weight: 800; }
-.kpi .l { font-size: 11px; color: var(--muted); }
-
-.model-box { margin-top: 8px; padding: 11px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
-.model-row { font-size: 12px; margin-bottom: 7px; }
-.model-row:last-child { margin-bottom: 0; }
-.model-row .top { display: flex; justify-content: space-between; margin-bottom: 4px; }
-.model-row .top .tokens { color: var(--muted); }
-.model-bar { height: 6px; border-radius: 6px; background: var(--track); overflow: hidden; }
-.model-bar > i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
-
-.tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
-.tool { text-align: center; padding: 9px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
-.tool .n { font-size: 16px; font-weight: 800; }
-.tool .l { font-size: 10.5px; color: var(--muted); }
-
 .empty { padding: 14px; text-align: center; color: var(--muted); font-size: 12px; }
+
+/* ============ 设置：供应商复选 ============ */
+.prov-block {
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 12px; background: var(--panel);
+}
+.prov-head { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.prov-head input[type="checkbox"] {
+  width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer;
+}
+.prov-name { font-size: 13px; color: var(--text); }
+.prov-fields { margin-top: 10px; }
+.prov-fields[hidden] { display: none; }
+
+/* ============ 分栏面板 ============ */
+.panes { display: grid; gap: 8px; padding: 10px 14px 0; }
+.panes.two { grid-template-columns: 1fr 1fr; }
+.panes:not(.two) { grid-template-columns: 1fr; }
+.pane { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px 4px; }
+.pane-title { font-size: 12px; font-weight: 700; color: var(--muted); margin: 2px 0 2px; }
+.pane .limits { padding: 2px 0; }
+.pane .mcp { margin: 0; padding-bottom: 2px; }

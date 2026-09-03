@@ -1,127 +1,208 @@
-// 背景 service worker：定时拉取官方接口、更新徽章、缓存数据供弹窗读取。
-// 密钥只存本机 chrome.storage.local，仅用于向 open.bigmodel.cn 官方接口鉴权。
+// 背景 service worker：定时拉取各供应商官方接口、更新徽章（双供应商可配置循环切换）、缓存数据供弹窗读取。
+// 密钥只存本机 chrome.storage.local，仅用于向各供应商官方接口鉴权。
 
-import { fetchAll } from "../shared/api.js";
+import { fetchQuotaLimit } from "../shared/api.js";
 import { LEVEL_NAMES, describeLimit } from "../shared/constants.js";
+import { fetchGoUsage } from "../shared/go.js";
 import { pctColor, badgeText } from "../shared/format.js";
 
 const DEFAULTS = {
-  apiKey: "",
-  refreshMin: 10,      // 1–30
-  planExpiry: "",      // 用户手动填写的套餐到期日 YYYY-MM-DD
+  providers: {
+    glm: { enabled: true, apiKey: "", planExpiry: "" },
+    go: { enabled: false, apiKey: "" },
+  },
+  refreshMin: 10,
+  badgeCycleSec: 10, // 双供应商图标百分比循环间隔（秒）
   lastData: null,
   lastFetchAt: 0,
 };
 
-const STORE_KEYS = ["apiKey", "refreshMin", "planExpiry"];
+const LEGACY_KEYS = ["apiKey", "planExpiry"];
 
 async function getSettings() {
-  const got = await chrome.storage.local.get(STORE_KEYS);
+  const got = await chrome.storage.local.get(["providers", "refreshMin", "badgeCycleSec", ...LEGACY_KEYS]);
+  let providers = got.providers;
+  if (!providers) {
+    providers = {
+      glm: { enabled: true, apiKey: got.apiKey || "", planExpiry: got.planExpiry || "" },
+      go: { enabled: false, apiKey: "" },
+    };
+  }
+  const glm = { enabled: true, apiKey: "", planExpiry: "", ...(providers.glm || {}) };
+  const go = { enabled: false, apiKey: "", ...(providers.go || {}) };
+  const badgeCycleSec = Math.max(1, Math.min(300, Number(got.badgeCycleSec) || DEFAULTS.badgeCycleSec));
+  return { refreshMin: Number(got.refreshMin) || DEFAULTS.refreshMin, badgeCycleSec, providers: { glm, go } };
+}
+
+/* ---------- GLM：仅拉取额度（已按需求移除 24h 模型/工具用量） ---------- */
+async function fetchGlm(glmCfg) {
+  const quota = await fetchQuotaLimit(glmCfg.apiKey);
+  const limits = (quota.limits || []).slice()
+    .sort((a, b) => (a.nextResetTime || 0) - (b.nextResetTime || 0))
+    .map((l) => ({ ...l, name: describeLimit(l) }));
   return {
-    apiKey: got.apiKey || "",
-    refreshMin: got.refreshMin || DEFAULTS.refreshMin,
-    planExpiry: got.planExpiry || "",
+    level: quota.level || "unknown",
+    levelName: LEVEL_NAMES[quota.level] || quota.level,
+    planExpiry: glmCfg.planExpiry,
+    limits,
   };
 }
 
-function buildSnapshot(quota, model, tool, errors, planExpiry) {
-  const limits = (quota.limits || []).map((l) => ({ ...l, name: describeLimit(l) }));
-  return {
-    fetchedAt: Date.now(),
-    level: quota.level || "unknown",
-    levelName: LEVEL_NAMES[quota.level] || quota.level,
-    planExpiry: planExpiry || "",
-    limits,
-    model: model && !model.error ? model : null,
-    tool: tool && !tool.error ? tool : null,
-    errors: errors || [],
-  };
+/* ---------- 徽章：单行大字号；双供应商循环切换 ---------- */
+function glmHeadlinePct(glmData) {
+  const credit = (glmData && glmData.limits || []).find((l) => l.type === "CREDIT_LIMIT");
+  if (!credit) return null;
+  const p = Number(credit.percentage);
+  return Number.isNaN(p) ? null : p;
+}
+
+async function restoreBrandIcon() {
+  // MV3：setIcon({path}) 相对 service worker 目录解析，SW 在 background/ 下，需 ../icons/...
+  await chrome.action.setIcon({
+    path: { 16: "../icons/icon16.png", 32: "../icons/icon32.png", 48: "../icons/icon48.png", 128: "../icons/icon128.png" },
+  }).catch(() => {});
+}
+
+async function setBadgeItem(item) {
+  await chrome.action.setBadgeBackgroundColor({ color: pctColor(item.pct) });
+  await chrome.action.setBadgeText({ text: badgeText(item.pct) });
+}
+
+async function clearBadge() {
+  await chrome.action.setBadgeText({ text: "" });
+  await chrome.action.setBadgeBackgroundColor({ color: "#2E7D32" });
+}
+
+let cycleTimer = null;
+function clearCycleTimer() { if (cycleTimer) { clearInterval(cycleTimer); cycleTimer = null; } }
+
+async function cycleOnce() {
+  const got = await chrome.storage.local.get(["badgeItems", "badgeIdx"]);
+  const items = got.badgeItems || [];
+  if (!items.length) {
+    await clearBadge();
+    clearCycleTimer();
+    await chrome.alarms.clear("badge-cycle");
+    return;
+  }
+  const idx = ((got.badgeIdx || 0) + 1) % items.length;
+  await setBadgeItem(items[idx]);
+  await chrome.storage.local.set({ badgeIdx: idx });
+}
+
+// 定时器 + 闹钟（>=30s 保底）：SW 存活时按用户秒数轮换；SW 挂起后由闹钟续醒恢复
+async function startBadgeCycling(items, sec) {
+  await chrome.storage.local.set({ badgeItems: items, badgeIdx: 0 });
+  clearCycleTimer();
+  if (items.length <= 1) {
+    await chrome.alarms.clear("badge-cycle");
+    return;
+  }
+  await chrome.alarms.create("badge-cycle", { periodInMinutes: Math.max(0.5, sec / 60) });
+  cycleTimer = setInterval(cycleOnce, sec * 1000);
+}
+
+async function restartCycleTimer() {
+  clearCycleTimer();
+  const { badgeCycleSec } = await getSettings();
+  const got = await chrome.storage.local.get(["badgeItems"]);
+  if ((got.badgeItems || []).length > 1) cycleTimer = setInterval(cycleOnce, badgeCycleSec * 1000);
+}
+
+// lines = [{provider, pct}] 按 GLM→Go 顺序
+async function setActionIndicator(lines) {
+  await restoreBrandIcon();
+  if (!lines.length) {
+    await clearBadge();
+    clearCycleTimer();
+    await chrome.alarms.clear("badge-cycle");
+    return;
+  }
+  const items = lines.map((l) => ({ pct: l.pct }));
+  const { badgeCycleSec } = await getSettings();
+  await startBadgeCycling(items, badgeCycleSec);
+  await setBadgeItem(items[0]);
+}
+
+async function refresh() {
+  const { providers, badgeCycleSec } = await getSettings();
+  const lines = [];
+  const errors = [];
+  const snapshot = { fetchedAt: Date.now(), providers: { glm: null, go: null }, errors };
+
+  const glmCfg = providers.glm;
+  if (glmCfg.enabled && glmCfg.apiKey) {
+    try {
+      const glmData = await fetchGlm(glmCfg);
+      snapshot.providers.glm = glmData;
+      const pct = glmHeadlinePct(glmData);
+      if (pct !== null) lines.push({ provider: "glm", pct });
+    } catch (e) {
+      errors.push({ provider: "glm", message: e.message || String(e), kind: e.kind });
+      snapshot.providers.glm = { level: "unknown", levelName: "unknown", planExpiry: glmCfg.planExpiry, limits: [] };
+    }
+  }
+
+  const goCfg = providers.go;
+  if (goCfg.enabled && goCfg.apiKey) {
+    try {
+      const goData = await fetchGoUsage(goCfg.apiKey);
+      snapshot.providers.go = goData;
+      const rolling = (goData.windows || []).find((w) => w.key === "rolling");
+      if (rolling) lines.push({ provider: "go", pct: rolling.percent });
+    } catch (e) {
+      errors.push({ provider: "go", message: e.message || String(e), kind: e.kind });
+      snapshot.providers.go = { error: true, message: e.message || String(e) };
+    }
+  }
+
+  await setActionIndicator(lines);
+
+  await persistSnapshot(snapshot);
+  const ok = errors.length === 0;
+  return { ok, reason: ok ? "ok" : (lines.length ? "partial" : "error"), data: snapshot };
 }
 
 function persistSnapshot(snap) {
   return chrome.storage.local.set({ lastData: snap, lastFetchAt: Date.now() });
 }
 
-/** 五小时占比：取 nextResetTime 最小（窗口最短）的 CREDIT_LIMIT 条目。 */
-function badgePct(limits) {
-  const credit = limits.find((l) => l.type === "CREDIT_LIMIT");
-  if (!credit) return null;
-  const p = Number(credit.percentage);
-  if (Number.isNaN(p)) return null;
-  return p;
-}
-
-async function refresh() {
-  const { apiKey, planExpiry } = await getSettings();
-  if (!apiKey) {
-    await chrome.action.setBadgeText({ text: "" });
-    await chrome.storage.local.set({ lastData: null, lastFetchAt: 0 });
-    return { ok: false, reason: "no_key", data: null };
-  }
-
-  const res = await fetchAll(apiKey);
-  const errors = [];
-  let quota = res.quota;
-  if (quota.error) {
-    errors.push({ section: "quota", message: quota.error.message, kind: quota.error.kind });
-    quota = { limits: [], level: "unknown" };
-  }
-
-  const pct = badgePct(quota.limits || []);
-  if (pct !== null && pct !== undefined) {
-    await chrome.action.setBadgeBackgroundColor({ color: pctColor(pct) });
-    await chrome.action.setBadgeText({ text: badgeText(pct) });
-  } else {
-    await chrome.action.setBadgeText({ text: "" });
-  }
-
-  const snap = buildSnapshot(quota, res.model, res.tool, errors, planExpiry);
-  await persistSnapshot(snap);
-  return { ok: errors.length === 0, reason: errors.length ? "partial" : "ok", data: snap };
-}
-
 async function ensureAlarm() {
   const { refreshMin } = await getSettings();
-  const period = Math.min(30, Math.max(1, Number(refreshMin) || 10));
+  const period = Math.min(30, Math.max(1, refreshMin || 10));
   await chrome.alarms.clear("glm-refresh");
   await chrome.alarms.create("glm-refresh", { periodInMinutes: period });
   return period;
 }
 
-chrome.runtime.onInstalled.addListener(() => {
-  ensureAlarm().then(() => refresh());
-});
-
-chrome.runtime.onStartup.addListener(() => {
-  ensureAlarm().then(() => refresh());
-});
+chrome.runtime.onInstalled.addListener(() => { ensureAlarm().then(() => refresh()); });
+chrome.runtime.onStartup.addListener(() => { ensureAlarm().then(() => refresh()); });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "glm-refresh") refresh();
+  else if (alarm.name === "badge-cycle") { restartCycleTimer(); cycleOnce(); }
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
-    switch (msg?.type) {
-      case "refresh":
-        sendResponse(await refresh());
-        break;
-      case "getData": {
-        const got = await chrome.storage.local.get(["lastData", "lastFetchAt", "apiKey"]);
-        sendResponse({
-          data: got.lastData || null,
-          fetchedAt: got.lastFetchAt || 0,
-          hasKey: Boolean(got.apiKey),
-        });
-        break;
+    try {
+      switch (msg?.type) {
+        case "refresh":
+          return sendResponse(await refresh());
+        case "getData": {
+          const got = await chrome.storage.local.get(["lastData", "lastFetchAt", "providers", "badgeCycleSec"]);
+          return sendResponse({ data: got.lastData || null, fetchedAt: got.lastFetchAt || 0, providers: got.providers || null, badgeCycleSec: got.badgeCycleSec || null });
+        }
+        case "settingsChanged":
+          await ensureAlarm();
+          return sendResponse(await refresh());
+        default:
+          return sendResponse({ ok: false, reason: "unknown" });
       }
-      case "settingsChanged":
-        await ensureAlarm();
-        sendResponse(await refresh());
-        break;
-      default:
-        sendResponse({ ok: false, reason: "unknown" });
+    } catch (e) {
+      console.error("[glm-monitor] 后台处理消息出错:", e);
+      return sendResponse({ ok: false, error: String((e && e.message) || e) });
     }
   })();
-  return true; // 异步响应
+  return true;
 });

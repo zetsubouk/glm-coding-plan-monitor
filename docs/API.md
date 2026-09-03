@@ -1,9 +1,13 @@
-# 智谱 GLM Coding Plan 用量监控 — 接口契约（已实测确认）
+# AI Coding Plan 用量监控 — 接口契约（已实测确认）
 
-> 全部端点均为智谱**官方公开监控接口**，鉴权用平台 API Key（`Authorization` 请求头，不加 Bearer 前缀）。
-> 中国大陆版主机：`https://open.bigmodel.cn`。国际版（本期未启用）：`https://api.z.ai`，路径一致。
+本文档列出现有供应商的用量查询接口与数据结构。所有端点均为**官方公开接口**；密钥仅用于向对应当局官方接口鉴权。
 
-## 1. 配额/额度
+## 一、智谱 GLM（中国大陆版 `open.bigmodel.cn`）
+
+> 鉴权：请求头 `Authorization: <apiKey>`（不加 Bearer 前缀）。
+> 中国大陆版主机：`https://open.bigmodel.cn`。国际版（未启用）：`https://api.z.ai`，路径一致。
+
+### 1. 配额/额度
 
 ```
 GET https://open.bigmodel.cn/api/monitor/usage/quota/limit
@@ -45,7 +49,7 @@ Header: Authorization: <apiKey>
 | Pro  | 12,000 | 60,000 | ¥538/月 |
 | Max  | 28,000 | 140,000 | ¥1,078/月 |
 
-## 2. 24 小时模型用量
+### 2. 24 小时模型用量
 
 ```
 GET https://open.bigmodel.cn/api/monitor/usage/model-usage
@@ -70,7 +74,7 @@ Header: Authorization: <apiKey>
 }
 ```
 
-## 3. 24 小时工具用量
+### 3. 24 小时工具用量
 
 ```
 GET https://open.bigmodel.cn/api/monitor/usage/tool-usage
@@ -90,7 +94,36 @@ GET https://open.bigmodel.cn/api/monitor/usage/tool-usage
 }
 ```
 
-## 4. 边界与注意
-- 套餐额度/消耗**仅统计**在官方支持工具内的编码用量；本扩展只做查询，不发起模型请求，不消耗额度。
-- `model-usage`/`tool-usage` 在账号无对应消费时返回空 body（200）或全 0，属正常。
-- 团队版套餐查询需额外 `Bigmodel-Organization` / `Bigmodel-Project` 请求头，本期未支持。
+## 二、OpenCode Go（`opencode.ai`）
+
+> 鉴权：请求头 `Authorization: Bearer <apiKey>`。实测仅带 `Authorization` 不加 Bearer 会返回 401。
+> 该接口随服务器兼容 API 于合理延迟内返回；opencode.ai 面向国际用户，需可访问该域名。
+
+### 用量窗口
+
+```
+GET https://opencode.ai/zen/go/v1/usage
+Authorization: Bearer <go-api-key>
+```
+
+实测响应：
+
+```jsonc
+{
+  "usage": {
+    "rolling": { "status": "ok", "percent": 1,  "resetsAt": "2026-09-03T08:25:58.730Z" },  // 5 小时窗口
+    "weekly":  { "status": "ok", "percent": 27, "resetsAt": "2026-09-07T00:00:00.730Z" },
+    "monthly": { "status": "ok", "percent": 36, "resetsAt": "2026-09-17T04:14:27.730Z" }
+  }
+}
+```
+
+- 三个窗口：`rolling`（5 小时）、`weekly`（每周）、`monthly`（每月），仅返回 `percent`（已用百分比）与 `resetsAt`（下次重置 ISO 时间），**不返回美元数值**。
+- 各窗口的已知美元限额用于辅助展示：rolling `$12`、weekly `$30`、monthly `$60`。
+- 鉴权失败（Key 无效）：`{"type":"error","error":{"type":"AuthError","message":"Missing API key."}}`，HTTP 401。
+
+## 三、通用边界与注意
+- 套餐额度/消耗**仅统计**在官方支持工具内的编码用量；本扩展只做查询，不发起模型请求，不消耗任何套餐额度。
+- `model-usage`/`tool-usage`（GLM）在账号无对应消费时返回空 body（200）或全 0，属正常。
+- GLM 团队版套餐查询需额外 `Bigmodel-Organization` / `Bigmodel-Project` 请求头，本期未支持。
+- OpenCode Go 当前**无**面向 API Key 的 24h 模型/工具用量接口（官方功能请求 #31084 尚未落地），故 Go 分栏仅展示三个窗口进度条。
